@@ -68,7 +68,6 @@ function buildFaces(primary: string, dieIndex: number): DieState['faces'] {
 }
 
 function landingQuaternion(face: number): Quaternion {
-  const yaw = Math.floor(Math.random() * 4) * Math.PI / 2
   const faceRotation = [
     new Euler(0, 0, 0),
     new Euler(Math.PI, 0, 0),
@@ -77,21 +76,39 @@ function landingQuaternion(face: number): Quaternion {
     new Euler(0, 0, Math.PI / 2),
     new Euler(0, 0, -Math.PI / 2),
   ][face]
-  const result = new Quaternion().setFromEuler(faceRotation)
-  return new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), yaw).multiply(result)
+
+  // Each face needs a different quarter-turn after it is placed upward.
+  // These corrections make the Hebrew glyph read upright from the near-top-down camera.
+  const uprightYaw = [0, 0, 0, Math.PI, -Math.PI / 2, Math.PI / 2][face]
+  const faceQuaternion = new Quaternion().setFromEuler(faceRotation)
+  return new Quaternion()
+    .setFromAxisAngle(new Vector3(0, 1, 0), uprightYaw)
+    .multiply(faceQuaternion)
 }
 
 function freshMotion(rollKey: number): Motion {
   const targetFace = Math.floor(Math.random() * 6)
   return {
-    position: new Vector3(randomBetween(-2.25, 2.25), randomBetween(1.8, 3.8), randomBetween(-1.2, 1.2)),
-    velocity: new Vector3(randomBetween(-2.4, 2.4), randomBetween(0.2, 2.6), randomBetween(-2.2, 2.2)),
+    position: new Vector3(
+      randomBetween(-2.25, 2.25),
+      randomBetween(1.8, 3.8),
+      randomBetween(-1.2, 1.2),
+    ),
+    velocity: new Vector3(
+      randomBetween(-2.4, 2.4),
+      randomBetween(0.2, 2.6),
+      randomBetween(-2.2, 2.2),
+    ),
     quaternion: new Quaternion().setFromEuler(new Euler(
       randomBetween(0, Math.PI * 2),
       randomBetween(0, Math.PI * 2),
       randomBetween(0, Math.PI * 2),
     )),
-    angularVelocity: new Vector3(randomBetween(-11, 11), randomBetween(-11, 11), randomBetween(-11, 11)),
+    angularVelocity: new Vector3(
+      randomBetween(-11, 11),
+      randomBetween(-11, 11),
+      randomBetween(-11, 11),
+    ),
     targetQuaternion: landingQuaternion(targetFace),
     targetFace,
     lastRollKey: rollKey,
@@ -134,7 +151,9 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
         const angularSpeed = motion.angularVelocity.length()
         if (angularSpeed > 0.001) {
           const axis = motion.angularVelocity.clone().normalize()
-          motion.quaternion.premultiply(new Quaternion().setFromAxisAngle(axis, angularSpeed * delta)).normalize()
+          motion.quaternion
+            .premultiply(new Quaternion().setFromAxisAngle(axis, angularSpeed * delta))
+            .normalize()
         }
 
         const floor = FLOOR_Y + HALF
@@ -232,22 +251,47 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
     { position: [-HALF - 0.008, 0, 0], rotation: [0, -Math.PI / 2, 0] },
   ]
 
-  return <>{dice.map(die => {
-    if (die.consumed) return null
-    const selected = selectedIds.includes(die.id)
-    return (
-      <group key={die.id} ref={node => { refs.current[die.id] = node }} onPointerDown={event => { event.stopPropagation(); onSelect(die.id) }}>
-        <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow>
-          <meshStandardMaterial color={selected ? '#f0c879' : '#d8cfc0'} emissive={selected ? '#79521e' : '#000000'} emissiveIntensity={selected ? 0.16 : 0} roughness={0.88} metalness={0} />
-        </RoundedBox>
-        {faceTransforms.map((transform, face) => (
-          <Text key={face} position={transform.position} rotation={transform.rotation} fontSize={0.19} color="#171615" anchorX="center" anchorY="middle">
-            {die.faces[face]}
-          </Text>
-        ))}
-      </group>
-    )
-  })}</>
+  return (
+    <>
+      {dice.map(die => {
+        if (die.consumed) return null
+        const selected = selectedIds.includes(die.id)
+        return (
+          <group
+            key={die.id}
+            ref={node => { refs.current[die.id] = node }}
+            onPointerDown={event => {
+              event.stopPropagation()
+              onSelect(die.id)
+            }}
+          >
+            <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow>
+              <meshStandardMaterial
+                color={selected ? '#f0c879' : '#d8cfc0'}
+                emissive={selected ? '#79521e' : '#000000'}
+                emissiveIntensity={selected ? 0.16 : 0}
+                roughness={0.88}
+                metalness={0}
+              />
+            </RoundedBox>
+            {faceTransforms.map((transform, face) => (
+              <Text
+                key={face}
+                position={transform.position}
+                rotation={transform.rotation}
+                fontSize={0.19}
+                color="#171615"
+                anchorX="center"
+                anchorY="middle"
+              >
+                {die.faces[face]}
+              </Text>
+            ))}
+          </group>
+        )
+      })}
+    </>
+  )
 }
 
 function TrayGeometry() {
@@ -288,7 +332,13 @@ function DiceTray({ dice, selectedIds, onSelect, onLanded }: {
 }
 
 function createDice(rollSeed: number): DieState[] {
-  return START.map((primary, id) => ({ id, faces: buildFaces(primary, id), letter: primary, consumed: false, rollKey: rollSeed + id }))
+  return START.map((primary, id) => ({
+    id,
+    faces: buildFaces(primary, id),
+    letter: primary,
+    consumed: false,
+    rollKey: rollSeed + id,
+  }))
 }
 
 export default function App() {
@@ -304,33 +354,56 @@ export default function App() {
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
   const [message, setMessage] = useState('Each die has six letters. Wait for them to land, then click the upward faces in reading order.')
 
-  const currentWord = useMemo(() => selectedIds.map(id => dice.find(die => die.id === id)?.letter ?? '').join(''), [selectedIds, dice])
+  const currentWord = useMemo(
+    () => selectedIds.map(id => dice.find(die => die.id === id)?.letter ?? '').join(''),
+    [selectedIds, dice],
+  )
   const valid = Boolean(WORDS[currentWord])
   const activeDice = dice.filter(die => !die.consumed)
 
-  const selectDie = (id: number) => setSelectedIds(ids => ids.includes(id) ? ids.filter(existing => existing !== id) : [...ids, id])
-  const landed = (id: number, letter: string) => setDice(items => items.map(die => die.id === id && die.letter !== letter ? { ...die, letter } : die))
+  const selectDie = (id: number) => {
+    setSelectedIds(ids => ids.includes(id) ? ids.filter(existing => existing !== id) : [...ids, id])
+  }
+
+  const landed = (id: number, letter: string) => {
+    setDice(items => items.map(die => die.id === id && die.letter !== letter ? { ...die, letter } : die))
+  }
 
   const rerollSelected = () => {
-    if (rerolls <= 0) { setMessage('No rerolls remain this round.'); return }
-    if (selectedIds.length === 0) { setMessage('Select one or more loose dice to throw again.'); return }
+    if (rerolls <= 0) {
+      setMessage('No rerolls remain this round.')
+      return
+    }
+    if (selectedIds.length === 0) {
+      setMessage('Select one or more loose dice to throw again.')
+      return
+    }
     const ids = new Set(selectedIds)
-    setDice(items => items.map(die => ids.has(die.id) ? { ...die, rollKey: die.rollKey + 1000 + Date.now() } : die))
+    setDice(items => items.map(die => ids.has(die.id)
+      ? { ...die, rollKey: die.rollKey + 1000 + Date.now() }
+      : die
+    ))
     setRerolls(value => value - 1)
     setSelectedIds([])
-    setMessage(`${ids.size} ${ids.size === 1 ? 'die was' : 'dice were'} thrown again. The new letter is determined by the face that lands upward.`)
+    setMessage(`${ids.size} ${ids.size === 1 ? 'die was' : 'dice were'} thrown again. The upward face determines the new letter.`)
   }
 
   const shakeRemaining = () => {
     if (activeDice.length === 0) return
-    setDice(items => items.map(die => die.consumed ? die : { ...die, rollKey: die.rollKey + 1000 + Date.now() }))
+    setDice(items => items.map(die => die.consumed
+      ? die
+      : { ...die, rollKey: die.rollKey + 1000 + Date.now() }
+    ))
     setSelectedIds([])
     setMessage('All remaining dice were thrown again; every result comes from one of that die’s six faces.')
   }
 
   const submit = () => {
     const entry = WORDS[currentWord]
-    if (!entry) { setMessage(currentWord ? 'That spelling is not in the prototype dictionary.' : 'Select dice first.'); return }
+    if (!entry) {
+      setMessage(currentWord ? 'That spelling is not in the prototype dictionary.' : 'Select dice first.')
+      return
+    }
     setDice(items => items.map(die => selectedIds.includes(die.id) ? { ...die, consumed: true } : die))
     setRepository(repo => ({ ...repo, [currentWord]: (repo[currentWord] ?? 0) + 1 }))
     setCards(deck => [...deck, { id: Date.now(), spelling: currentWord, ...entry }])
@@ -341,8 +414,14 @@ export default function App() {
 
   const matchStack = (spelling: string) => {
     const card = cards.find(item => item.id === selectedCard)
-    if (!card) { setMessage('Select a meaning card first.'); return }
-    if (card.spelling !== spelling) { setMessage('Incorrect match. The card and stack remain.'); return }
+    if (!card) {
+      setMessage('Select a meaning card first.')
+      return
+    }
+    if (card.spelling !== spelling) {
+      setMessage('Incorrect match. The card and stack remain.')
+      return
+    }
     setCards(deck => deck.filter(item => item.id !== card.id))
     setRepository(repo => {
       const next = { ...repo, [spelling]: repo[spelling] - 1 }
@@ -367,17 +446,28 @@ export default function App() {
       <header className="topbar">
         <div className="stat"><span>ROUND</span><strong>{round}</strong></div>
         <div className="stat"><span>SCORE</span><strong>{score.toLocaleString()}</strong></div>
-        <div className="word-display"><span>CURRENT WORD</span><strong dir="rtl">{currentWord || '—'}</strong><small>{valid ? 'VALID SPELLING' : 'BUILD A WORD'}</small></div>
+        <div className="word-display">
+          <span>CURRENT WORD</span>
+          <strong dir="rtl">{currentWord || '—'}</strong>
+          <small>{valid ? 'VALID SPELLING' : 'BUILD A WORD'}</small>
+        </div>
         <div className="stat reroll-stat"><span>REROLLS</span><strong>{rerolls}</strong></div>
       </header>
 
       <section className={`repository panel ${repoOpen ? 'open' : 'closed'}`}>
-        <button className="panel-tab" onClick={() => setRepoOpen(open => !open)} aria-label="Toggle word repository">{repoOpen ? '‹' : '›'}</button>
+        <button className="panel-tab" onClick={() => setRepoOpen(open => !open)} aria-label="Toggle word repository">
+          {repoOpen ? '‹' : '›'}
+        </button>
         <div className="panel-content">
-          <h2>WORD REPOSITORY</h2><p>Cached spellings</p>
+          <h2>WORD REPOSITORY</h2>
+          <p>Cached spellings</p>
           <div className="stack-list">
             {Object.entries(repository).length === 0 && <div className="empty">No words cached</div>}
-            {Object.entries(repository).map(([word, count]) => <button key={word} className="word-stack" onClick={() => matchStack(word)}><b dir="rtl">{word}</b><span>×{count}</span></button>)}
+            {Object.entries(repository).map(([word, count]) => (
+              <button key={word} className="word-stack" onClick={() => matchStack(word)}>
+                <b dir="rtl">{word}</b><span>×{count}</span>
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -393,10 +483,27 @@ export default function App() {
       </section>
 
       <section className={`deck-drawer ${deckOpen ? 'open' : 'closed'}`}>
-        <button className="drawer-tab" onClick={() => setDeckOpen(open => !open)}>{deckOpen ? '⌄' : '⌃'} DECIPHER DECK · {cards.length}</button>
-        <div className="cards-row">
+        <button
+          className="drawer-tab"
+          onClick={() => setDeckOpen(open => !open)}
+          aria-expanded={deckOpen}
+          aria-label={deckOpen ? 'Collapse decipher deck' : 'Open decipher deck'}
+        >
+          {deckOpen ? '⌄' : '⌃'} DECIPHER DECK · {cards.length}
+        </button>
+        <div className="cards-row" aria-hidden={!deckOpen}>
           {cards.length === 0 && <div className="empty deck-empty">Submitted words create meaning cards here.</div>}
-          {cards.map(card => <button key={card.id} className={`meaning-card ${selectedCard === card.id ? 'selected' : ''}`} onClick={() => setSelectedCard(card.id)}><span className="card-image">{card.image}</span><b>{card.meaning}</b><small>Match to a spelling</small></button>)}
+          {cards.map(card => (
+            <button
+              key={card.id}
+              className={`meaning-card ${selectedCard === card.id ? 'selected' : ''}`}
+              onClick={() => setSelectedCard(card.id)}
+            >
+              <span className="card-image">{card.image}</span>
+              <b>{card.meaning}</b>
+              <small>Match to a spelling</small>
+            </button>
+          ))}
         </div>
       </section>
 
