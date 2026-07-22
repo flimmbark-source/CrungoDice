@@ -1,6 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Environment, RoundedBox, Text } from '@react-three/drei'
+import { RoundedBox, Text } from '@react-three/drei'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Group } from 'three'
 import { Euler, Quaternion, Vector3 } from 'three'
@@ -230,7 +230,7 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
 }
 
 function TrayGeometry() { return <group><RoundedBox args={[6.65, 0.38, 4.25]} radius={0.26} smoothness={4} position={[0, FLOOR_Y - 0.18, 0]} receiveShadow><meshStandardMaterial color="#121820" roughness={0.94} /></RoundedBox><mesh position={[0, -0.17, BACK - 0.13]}><boxGeometry args={[6.55, 0.86, 0.28]} /><meshStandardMaterial color="#222933" /></mesh><mesh position={[0, -0.17, FRONT + 0.13]}><boxGeometry args={[6.55, 0.86, 0.28]} /><meshStandardMaterial color="#222933" /></mesh><mesh position={[LEFT - 0.13, -0.17, 0]}><boxGeometry args={[0.28, 0.86, 3.95]} /><meshStandardMaterial color="#222933" /></mesh><mesh position={[RIGHT + 0.13, -0.17, 0]}><boxGeometry args={[0.28, 0.86, 3.95]} /><meshStandardMaterial color="#222933" /></mesh></group> }
-function DiceTray(props: Parameters<typeof LooseDice>[0]) { return <Canvas shadows camera={{ position: [0, 9.4, 1.15], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, -0.35, 0)}><color attach="background" args={['#11161d']} /><ambientLight intensity={1.15} /><directionalLight position={[4, 8, 4]} intensity={3.1} castShadow /><pointLight position={[-3.5, 1.6, -1.5]} color="#846ff0" intensity={6.5} distance={8} /><TrayGeometry /><LooseDice {...props} /><Environment preset="warehouse" /></Canvas> }
+function DiceTray(props: Parameters<typeof LooseDice>[0]) { return <Canvas fallback={<div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#aeb7c4', fontFamily: 'monospace' }}>3D dice are unavailable on this device.</div>} shadows camera={{ position: [0, 9.4, 1.15], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, -0.35, 0)}><color attach="background" args={['#11161d']} /><ambientLight intensity={1.15} /><directionalLight position={[4, 8, 4]} intensity={3.1} castShadow /><pointLight position={[-3.5, 1.6, -1.5]} color="#846ff0" intensity={6.5} distance={8} /><TrayGeometry /><LooseDice {...props} /></Canvas> }
 
 export default function App() {
   const [mode, setMode] = useState<GameMode>('pack')
