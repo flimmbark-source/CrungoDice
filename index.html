@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b0e13" />
     <title>Crungo Dice</title>
+    <style>
+      html, body, #root { min-height: 100%; margin: 0; background: #080b10; }
+      .boot-fallback { min-height: 100vh; display: grid; place-items: center; color: #aeb7c4; font: 14px monospace; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot-fallback">Loading Crungo Dice…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
