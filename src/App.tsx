@@ -7,15 +7,49 @@ import { Euler, Quaternion, Vector3 } from 'three'
 const LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת']
 const START = ['ס','פ','ר','ב','י','ת','כ','ל']
 
-const WORDS: Record<string, { meaning: string; image: string; pointed: string }> = {
-  'ספר': { meaning: 'Book', image: '📕', pointed: 'סֵפֶר' },
-  'בית': { meaning: 'House', image: '🏠', pointed: 'בַּיִת' },
-  'כלב': { meaning: 'Dog', image: '🐕', pointed: 'כֶּלֶב' },
-  'ים': { meaning: 'Sea', image: '🌊', pointed: 'יָם' },
-  'לב': { meaning: 'Heart', image: '❤️', pointed: 'לֵב' },
-  'בר': { meaning: 'Grain', image: '🌾', pointed: 'בָּר' },
-  'רב': { meaning: 'Many', image: '✦', pointed: 'רַב' },
+type WordEntry = {
+  id: string
+  spelling: string
+  pointed: string
+  meaning: string
+  image: string
+  transliteration: string
+  packId: string
 }
+
+type WordPack = {
+  id: string
+  name: string
+  description: string
+  entries: WordEntry[]
+}
+
+const ACTIVE_PACK: WordPack = {
+  id: 'everyday-world',
+  name: 'Everyday World',
+  description: 'Explore familiar things, places, and living beings.',
+  entries: [
+    { id: 'home-book', spelling: 'ספר', pointed: 'סֵפֶר', meaning: 'Book', image: '📕', transliteration: 'sefer', packId: 'everyday-world' },
+    { id: 'home-house', spelling: 'בית', pointed: 'בַּיִת', meaning: 'House', image: '🏠', transliteration: 'bayit', packId: 'everyday-world' },
+    { id: 'home-dog', spelling: 'כלב', pointed: 'כֶּלֶב', meaning: 'Dog', image: '🐕', transliteration: 'kelev', packId: 'everyday-world' },
+    { id: 'home-sea', spelling: 'ים', pointed: 'יָם', meaning: 'Sea', image: '🌊', transliteration: 'yam', packId: 'everyday-world' },
+    { id: 'home-heart', spelling: 'לב', pointed: 'לֵב', meaning: 'Heart', image: '❤️', transliteration: 'lev', packId: 'everyday-world' },
+    { id: 'home-water', spelling: 'מים', pointed: 'מַיִם', meaning: 'Water', image: '💧', transliteration: 'mayim', packId: 'everyday-world' },
+    { id: 'home-light', spelling: 'אור', pointed: 'אוֹר', meaning: 'Light', image: '💡', transliteration: 'or', packId: 'everyday-world' },
+    { id: 'home-hand', spelling: 'יד', pointed: 'יָד', meaning: 'Hand', image: '✋', transliteration: 'yad', packId: 'everyday-world' },
+    { id: 'home-child', spelling: 'ילד', pointed: 'יֶלֶד', meaning: 'Child', image: '🧒', transliteration: 'yeled', packId: 'everyday-world' },
+  ],
+}
+
+const BONUS_WORDS: WordEntry[] = [
+  { id: 'bonus-grain', spelling: 'בר', pointed: 'בָּר', meaning: 'Grain', image: '🌾', transliteration: 'bar', packId: 'bonus' },
+  { id: 'bonus-many', spelling: 'רב', pointed: 'רַב', meaning: 'Many', image: '✦', transliteration: 'rav', packId: 'bonus' },
+]
+
+const ALL_WORDS = [...ACTIVE_PACK.entries, ...BONUS_WORDS].reduce<Record<string, WordEntry>>((words, entry) => {
+  words[entry.spelling] = entry
+  return words
+}, {})
 
 type DieState = {
   id: number
@@ -25,13 +59,7 @@ type DieState = {
   rollKey: number
 }
 
-type CardState = {
-  id: number
-  spelling: string
-  meaning: string
-  image: string
-  pointed: string
-}
+type CardState = WordEntry & { cardId: number }
 
 type Motion = {
   position: Vector3
@@ -57,13 +85,17 @@ const FRONT = 1.83
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
 
 function buildFaces(primary: string, dieIndex: number): DieState['faces'] {
+  const packLetters = ACTIVE_PACK.entries.flatMap(entry => [...entry.spelling])
+  const pool = [...new Set([...packLetters, ...LETTERS])]
   const faces = [primary]
-  let cursor = (dieIndex * 5 + 3) % LETTERS.length
+  let cursor = (dieIndex * 5 + 3) % pool.length
+
   while (faces.length < 6) {
-    const candidate = LETTERS[cursor % LETTERS.length]
+    const candidate = pool[cursor % pool.length]
     if (!faces.includes(candidate)) faces.push(candidate)
     cursor += 3
   }
+
   return faces as DieState['faces']
 }
 
@@ -77,8 +109,6 @@ function landingQuaternion(face: number): Quaternion {
     new Euler(0, 0, -Math.PI / 2),
   ][face]
 
-  // Each face needs a different quarter-turn after it is placed upward.
-  // These corrections make the Hebrew glyph read upright from the near-top-down camera.
   const uprightYaw = [0, 0, 0, Math.PI, -Math.PI / 2, Math.PI / 2][face]
   const faceQuaternion = new Quaternion().setFromEuler(faceRotation)
   return new Quaternion()
@@ -89,26 +119,14 @@ function landingQuaternion(face: number): Quaternion {
 function freshMotion(rollKey: number): Motion {
   const targetFace = Math.floor(Math.random() * 6)
   return {
-    position: new Vector3(
-      randomBetween(-2.25, 2.25),
-      randomBetween(1.8, 3.8),
-      randomBetween(-1.2, 1.2),
-    ),
-    velocity: new Vector3(
-      randomBetween(-2.4, 2.4),
-      randomBetween(0.2, 2.6),
-      randomBetween(-2.2, 2.2),
-    ),
+    position: new Vector3(randomBetween(-2.25, 2.25), randomBetween(1.8, 3.8), randomBetween(-1.2, 1.2)),
+    velocity: new Vector3(randomBetween(-2.4, 2.4), randomBetween(0.2, 2.6), randomBetween(-2.2, 2.2)),
     quaternion: new Quaternion().setFromEuler(new Euler(
       randomBetween(0, Math.PI * 2),
       randomBetween(0, Math.PI * 2),
       randomBetween(0, Math.PI * 2),
     )),
-    angularVelocity: new Vector3(
-      randomBetween(-11, 11),
-      randomBetween(-11, 11),
-      randomBetween(-11, 11),
-    ),
+    angularVelocity: new Vector3(randomBetween(-11, 11), randomBetween(-11, 11), randomBetween(-11, 11)),
     targetQuaternion: landingQuaternion(targetFace),
     targetFace,
     lastRollKey: rollKey,
@@ -118,9 +136,10 @@ function freshMotion(rollKey: number): Motion {
   }
 }
 
-function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
+function LooseDice({ dice, selectedIds, viableIds, onSelect, onLanded }: {
   dice: DieState[]
   selectedIds: number[]
+  viableIds: number[]
   onSelect: (id: number) => void
   onLanded: (id: number, letter: string) => void
 }) {
@@ -256,6 +275,10 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
       {dice.map(die => {
         if (die.consumed) return null
         const selected = selectedIds.includes(die.id)
+        const viable = viableIds.includes(die.id)
+        const dieColor = selected ? '#f0c879' : viable ? '#b9d9bd' : '#d8cfc0'
+        const emissive = selected ? '#79521e' : viable ? '#315d3c' : '#000000'
+
         return (
           <group
             key={die.id}
@@ -267,9 +290,9 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
           >
             <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow>
               <meshStandardMaterial
-                color={selected ? '#f0c879' : '#d8cfc0'}
-                emissive={selected ? '#79521e' : '#000000'}
-                emissiveIntensity={selected ? 0.16 : 0}
+                color={dieColor}
+                emissive={emissive}
+                emissiveIntensity={selected ? 0.16 : viable ? 0.28 : 0}
                 roughness={0.88}
                 metalness={0}
               />
@@ -308,9 +331,10 @@ function TrayGeometry() {
   )
 }
 
-function DiceTray({ dice, selectedIds, onSelect, onLanded }: {
+function DiceTray({ dice, selectedIds, viableIds, onSelect, onLanded }: {
   dice: DieState[]
   selectedIds: number[]
+  viableIds: number[]
   onSelect: (id: number) => void
   onLanded: (id: number, letter: string) => void
 }) {
@@ -325,7 +349,7 @@ function DiceTray({ dice, selectedIds, onSelect, onLanded }: {
       <directionalLight position={[4, 8, 4]} intensity={3.1} castShadow shadow-mapSize={[1024, 1024]} />
       <pointLight position={[-3.5, 1.6, -1.5]} color="#846ff0" intensity={6.5} distance={8} />
       <TrayGeometry />
-      <LooseDice dice={dice} selectedIds={selectedIds} onSelect={onSelect} onLanded={onLanded} />
+      <LooseDice dice={dice} selectedIds={selectedIds} viableIds={viableIds} onSelect={onSelect} onLanded={onLanded} />
       <Environment preset="warehouse" />
     </Canvas>
   )
@@ -348,18 +372,40 @@ export default function App() {
   const [score, setScore] = useState(0)
   const [round, setRound] = useState(1)
   const [repository, setRepository] = useState<Record<string, number>>({})
+  const [discoveries, setDiscoveries] = useState<Record<string, WordEntry>>({})
   const [cards, setCards] = useState<CardState[]>([])
   const [repoOpen, setRepoOpen] = useState(true)
   const [deckOpen, setDeckOpen] = useState(true)
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
-  const [message, setMessage] = useState('Each die has six letters. Wait for them to land, then click the upward faces in reading order.')
+  const [reveal, setReveal] = useState<WordEntry | null>(null)
+  const [message, setMessage] = useState('Choose any first die. Green dice preserve at least one path through this pack.')
 
   const currentWord = useMemo(
     () => selectedIds.map(id => dice.find(die => die.id === id)?.letter ?? '').join(''),
     [selectedIds, dice],
   )
-  const valid = Boolean(WORDS[currentWord])
+  const entry = ALL_WORDS[currentWord]
+  const valid = Boolean(entry)
   const activeDice = dice.filter(die => !die.consumed)
+
+  const viableIds = useMemo(() => {
+    if (selectedIds.length === 0) return []
+    const selected = new Set(selectedIds)
+    const packSpellings = ACTIVE_PACK.entries.map(word => word.spelling)
+
+    return dice
+      .filter(die => !die.consumed && !selected.has(die.id))
+      .filter(die => packSpellings.some(spelling => spelling.startsWith(currentWord + die.letter)))
+      .map(die => die.id)
+  }, [currentWord, dice, selectedIds])
+
+  const pathMessage = selectedIds.length === 0
+    ? 'Choose any starting letter'
+    : viableIds.length > 0
+      ? `${viableIds.length} guided ${viableIds.length === 1 ? 'path' : 'paths'} remain`
+      : valid
+        ? 'Word complete; submit or keep exploring freely'
+        : 'No pack path remains; free discovery is still allowed'
 
   const selectDie = (id: number) => {
     setSelectedIds(ids => ids.includes(id) ? ids.filter(existing => existing !== id) : [...ids, id])
@@ -378,6 +424,7 @@ export default function App() {
       setMessage('Select one or more loose dice to throw again.')
       return
     }
+
     const ids = new Set(selectedIds)
     setDice(items => items.map(die => ids.has(die.id)
       ? { ...die, rollKey: die.rollKey + 1000 + Date.now() }
@@ -395,25 +442,30 @@ export default function App() {
       : { ...die, rollKey: die.rollKey + 1000 + Date.now() }
     ))
     setSelectedIds([])
-    setMessage('All remaining dice were thrown again; every result comes from one of that die’s six faces.')
+    setMessage('All remaining dice were thrown again.')
   }
 
   const submit = () => {
-    const entry = WORDS[currentWord]
     if (!entry) {
       setMessage(currentWord ? 'That spelling is not in the prototype dictionary.' : 'Select dice first.')
       return
     }
+
     setDice(items => items.map(die => selectedIds.includes(die.id) ? { ...die, consumed: true } : die))
     setRepository(repo => ({ ...repo, [currentWord]: (repo[currentWord] ?? 0) + 1 }))
-    setCards(deck => [...deck, { id: Date.now(), spelling: currentWord, ...entry }])
+    setDiscoveries(found => ({ ...found, [currentWord]: entry }))
+    setCards(deck => [...deck, { ...entry, cardId: Date.now() }])
     setScore(value => value + currentWord.length * 10)
-    setMessage(`${currentWord} cached. A meaning card entered the deck.`)
+    setReveal(entry)
+    setMessage(entry.packId === ACTIVE_PACK.id
+      ? `${currentWord} discovered in ${ACTIVE_PACK.name}.`
+      : `${currentWord} found as a bonus discovery outside the guided pack.`
+    )
     setSelectedIds([])
   }
 
   const matchStack = (spelling: string) => {
-    const card = cards.find(item => item.id === selectedCard)
+    const card = cards.find(item => item.cardId === selectedCard)
     if (!card) {
       setMessage('Select a meaning card first.')
       return
@@ -422,7 +474,8 @@ export default function App() {
       setMessage('Incorrect match. The card and stack remain.')
       return
     }
-    setCards(deck => deck.filter(item => item.id !== card.id))
+
+    setCards(deck => deck.filter(item => item.cardId !== card.cardId))
     setRepository(repo => {
       const next = { ...repo, [spelling]: repo[spelling] - 1 }
       if (next[spelling] <= 0) delete next[spelling]
@@ -447,38 +500,54 @@ export default function App() {
         <div className="stat"><span>ROUND</span><strong>{round}</strong></div>
         <div className="stat"><span>SCORE</span><strong>{score.toLocaleString()}</strong></div>
         <div className="word-display">
-          <span>CURRENT WORD</span>
+          <span>{ACTIVE_PACK.name.toUpperCase()}</span>
           <strong dir="rtl">{currentWord || '—'}</strong>
-          <small>{valid ? 'VALID SPELLING' : 'BUILD A WORD'}</small>
+          <small>{valid ? 'DISCOVERABLE WORD' : pathMessage.toUpperCase()}</small>
         </div>
         <div className="stat reroll-stat"><span>REROLLS</span><strong>{rerolls}</strong></div>
       </header>
 
       <section className={`repository panel ${repoOpen ? 'open' : 'closed'}`}>
-        <button className="panel-tab" onClick={() => setRepoOpen(open => !open)} aria-label="Toggle word repository">
+        <button className="panel-tab" onClick={() => setRepoOpen(open => !open)} aria-label="Toggle discovered words">
           {repoOpen ? '‹' : '›'}
         </button>
         <div className="panel-content">
-          <h2>WORD REPOSITORY</h2>
-          <p>Cached spellings</p>
+          <h2>DISCOVERED WORDS</h2>
+          <p>{ACTIVE_PACK.description}</p>
           <div className="stack-list">
-            {Object.entries(repository).length === 0 && <div className="empty">No words cached</div>}
-            {Object.entries(repository).map(([word, count]) => (
-              <button key={word} className="word-stack" onClick={() => matchStack(word)}>
-                <b dir="rtl">{word}</b><span>×{count}</span>
-              </button>
-            ))}
+            {Object.entries(repository).length === 0 && <div className="empty">Follow the glowing paths and submit a word to reveal its meaning.</div>}
+            {Object.entries(repository).map(([word, count]) => {
+              const discovery = discoveries[word]
+              return (
+                <details key={word} className="word-discovery">
+                  <summary>
+                    <b dir="rtl">{word}</b>
+                    <span>×{count}</span>
+                  </summary>
+                  {discovery && (
+                    <button className="discovery-detail" onClick={() => matchStack(word)}>
+                      <span className="discovery-icon">{discovery.image}</span>
+                      <span>
+                        <strong dir="rtl">{discovery.pointed}</strong>
+                        <small>{discovery.meaning} · {discovery.transliteration}</small>
+                      </span>
+                    </button>
+                  )}
+                </details>
+              )
+            })}
           </div>
         </div>
       </section>
 
       <section className="tray-wrap">
-        <DiceTray dice={dice} selectedIds={selectedIds} onSelect={selectDie} onLanded={landed} />
+        <div className="path-guide" aria-live="polite">{pathMessage}</div>
+        <DiceTray dice={dice} selectedIds={selectedIds} viableIds={viableIds} onSelect={selectDie} onLanded={landed} />
         <div className="tray-actions">
           <button className="secondary" onClick={shakeRemaining}>SHAKE</button>
           <button className="secondary" onClick={rerollSelected}>REROLL SELECTED</button>
           <button className="secondary" onClick={nextRound}>NEXT ROUND</button>
-          <button className="primary" disabled={!valid} onClick={submit}>SUBMIT</button>
+          <button className="primary" disabled={!valid} onClick={submit}>DISCOVER</button>
         </div>
       </section>
 
@@ -489,23 +558,37 @@ export default function App() {
           aria-expanded={deckOpen}
           aria-label={deckOpen ? 'Collapse decipher deck' : 'Open decipher deck'}
         >
-          {deckOpen ? '⌄' : '⌃'} DECIPHER DECK · {cards.length}
+          {deckOpen ? '›' : '‹'} DECIPHER · {cards.length}
         </button>
         <div className="cards-row" aria-hidden={!deckOpen}>
-          {cards.length === 0 && <div className="empty deck-empty">Submitted words create meaning cards here.</div>}
+          {cards.length === 0 && <div className="empty deck-empty">Discovered words create recall cards here.</div>}
           {cards.map(card => (
             <button
-              key={card.id}
-              className={`meaning-card ${selectedCard === card.id ? 'selected' : ''}`}
-              onClick={() => setSelectedCard(card.id)}
+              key={card.cardId}
+              className={`meaning-card ${selectedCard === card.cardId ? 'selected' : ''}`}
+              onClick={() => setSelectedCard(card.cardId)}
             >
               <span className="card-image">{card.image}</span>
               <b>{card.meaning}</b>
-              <small>Match to a spelling</small>
+              <small>Match to its Hebrew spelling</small>
             </button>
           ))}
         </div>
       </section>
+
+      {reveal && (
+        <div className="discovery-overlay" role="dialog" aria-modal="true" aria-labelledby="discovery-title">
+          <div className="discovery-card">
+            <span className="reveal-kicker">{reveal.packId === ACTIVE_PACK.id ? 'WORD DISCOVERED' : 'BONUS DISCOVERY'}</span>
+            <span className="reveal-image" aria-hidden="true">{reveal.image}</span>
+            <h1 id="discovery-title" dir="rtl">{reveal.pointed}</h1>
+            <strong>{reveal.meaning}</strong>
+            <small>{reveal.transliteration}</small>
+            <p>{reveal.packId === ACTIVE_PACK.id ? `Added to ${ACTIVE_PACK.name}.` : 'Found beyond the guided paths.'}</p>
+            <button onClick={() => setReveal(null)}>CONTINUE</button>
+          </div>
+        </div>
+      )}
 
       <footer className="status-line">{message}</footer>
     </main>
