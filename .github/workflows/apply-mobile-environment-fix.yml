@@ -1,0 +1,29 @@
+name: Apply mobile environment fix
+
+on:
+  push:
+    branches: [fix-mobile-environment-hang]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix-mobile-environment-hang
+
+      - name: Patch the source
+        run: node scripts/apply-mobile-environment-fix.mjs
+
+      - name: Commit the source change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Remove remote environment from mobile startup"
+          git push origin HEAD:fix-mobile-environment-hang
