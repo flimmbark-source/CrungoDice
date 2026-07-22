@@ -1,4 +1,4 @@
-@media (max-width: 700px) {
+@media (max-width: 700px), (max-height: 600px) and (max-width: 1000px) {
   html,
   body,
   #root {
@@ -163,6 +163,11 @@
     margin: 0 10px 42px;
     transform: none;
     transition: height 0.25s ease;
+  }
+
+  [dir='rtl'] .panel {
+    right: auto;
+    left: auto;
   }
 
   .panel.closed {
