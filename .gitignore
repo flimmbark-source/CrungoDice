@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.tsbuildinfo
+src/data/freeWords.en.ts
+src/data/freeWords.he.ts
