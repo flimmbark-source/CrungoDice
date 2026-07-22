@@ -1,7 +1,8 @@
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, Float, Html, RoundedBox } from '@react-three/drei'
-import { useMemo, useRef, useState } from 'react'
-import type { Group } from 'three'
+import { Canvas } from '@react-three/fiber'
+import { Environment, RoundedBox, Text } from '@react-three/drei'
+import { CuboidCollider, Physics, RigidBody } from '@react-three/rapier'
+import type { RapierRigidBody } from '@react-three/rapier'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 
 const LETTERS = ['א','ב','ג','ד','ה','ו','ז','ח','ט','י','כ','ל','מ','נ','ס','ע','פ','צ','ק','ר','ש','ת']
 const START = ['ס','פ','ר','ב','י','ת','כ','ל']
@@ -19,78 +20,176 @@ const WORDS: Record<string, { meaning: string; image: string; pointed: string }>
 type DieState = { id: number; letter: string; consumed: boolean; rollKey: number }
 type CardState = { id: number; spelling: string; meaning: string; image: string; pointed: string }
 
-function Die({ die, index, selected, onSelect, onReroll }: {
+type Face = {
+  position: [number, number, number]
+  rotation: [number, number, number]
+}
+
+const DIE_SIZE = 0.58
+const HALF_DIE = DIE_SIZE / 2 + 0.006
+const FACES: Face[] = [
+  { position: [0, HALF_DIE, 0], rotation: [-Math.PI / 2, 0, 0] },
+  { position: [0, -HALF_DIE, 0], rotation: [Math.PI / 2, 0, Math.PI] },
+  { position: [0, 0, HALF_DIE], rotation: [0, 0, 0] },
+  { position: [0, 0, -HALF_DIE], rotation: [0, Math.PI, 0] },
+  { position: [HALF_DIE, 0, 0], rotation: [0, Math.PI / 2, 0] },
+  { position: [-HALF_DIE, 0, 0], rotation: [0, -Math.PI / 2, 0] },
+]
+
+function randomBetween(min: number, max: number) {
+  return min + Math.random() * (max - min)
+}
+
+function Die({ die, selected, onSelect }: {
   die: DieState
-  index: number
   selected: boolean
   onSelect: () => void
-  onReroll: () => void
 }) {
-  const ref = useRef<Group>(null)
-  const targetY = selected ? 0.72 : 0
-  const x = (index % 4 - 1.5) * 1.35
-  const z = (Math.floor(index / 4) - 0.5) * 1.55
+  const body = useRef<RapierRigidBody>(null)
+  const spawn = useMemo<[number, number, number]>(() => [
+    randomBetween(-2.2, 2.2),
+    randomBetween(1.5, 3.2),
+    randomBetween(-1.25, 1.25),
+  ], [])
 
-  useFrame((_, delta) => {
-    if (!ref.current) return
-    ref.current.position.y += (targetY - ref.current.position.y) * Math.min(1, delta * 10)
-    if (die.rollKey) {
-      ref.current.rotation.x += delta * 2.5
-      ref.current.rotation.z += delta * 1.8
-    }
-  })
+  useEffect(() => {
+    const rigidBody = body.current
+    if (!rigidBody || die.consumed) return
+
+    rigidBody.wakeUp()
+    rigidBody.setTranslation({
+      x: randomBetween(-2.2, 2.2),
+      y: randomBetween(1.8, 3.3),
+      z: randomBetween(-1.2, 1.2),
+    }, true)
+    rigidBody.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true)
+    rigidBody.setLinvel({
+      x: randomBetween(-2.4, 2.4),
+      y: randomBetween(1.2, 3.3),
+      z: randomBetween(-2.2, 2.2),
+    }, true)
+    rigidBody.setAngvel({
+      x: randomBetween(-12, 12),
+      y: randomBetween(-12, 12),
+      z: randomBetween(-12, 12),
+    }, true)
+  }, [die.rollKey, die.consumed])
 
   if (die.consumed) return null
 
   return (
-    <group ref={ref} position={[x, 0, z]}>
-      <Float speed={selected ? 3 : 1.1} rotationIntensity={selected ? 0.16 : 0.03} floatIntensity={selected ? 0.18 : 0.04}>
-        <RoundedBox
-          args={[1, 1, 1]}
-          radius={0.15}
-          smoothness={5}
-          castShadow
-          receiveShadow
-          onClick={(e) => { e.stopPropagation(); onSelect() }}
-          onDoubleClick={(e) => { e.stopPropagation(); onReroll() }}
+    <RigidBody
+      ref={body}
+      colliders="cuboid"
+      position={spawn}
+      restitution={0.28}
+      friction={0.9}
+      linearDamping={0.12}
+      angularDamping={0.18}
+      canSleep
+    >
+      <RoundedBox
+        args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]}
+        radius={0.085}
+        smoothness={4}
+        castShadow
+        receiveShadow
+        onPointerDown={(event) => {
+          event.stopPropagation()
+          onSelect()
+        }}
+      >
+        <meshStandardMaterial
+          color={selected ? '#f4d79b' : '#e9dfcf'}
+          emissive={selected ? '#7a5a22' : '#000000'}
+          emissiveIntensity={selected ? 0.22 : 0}
+          roughness={0.62}
+          metalness={0.02}
+        />
+      </RoundedBox>
+      {FACES.map((face, index) => (
+        <Text
+          key={index}
+          position={face.position}
+          rotation={face.rotation}
+          fontSize={0.24}
+          color="#17191c"
+          anchorX="center"
+          anchorY="middle"
+          depthOffset={-1}
         >
-          <meshStandardMaterial color={selected ? '#f6e3bc' : '#e9dfcf'} roughness={0.55} metalness={0.03} />
-          <Html center transform distanceFactor={7.5} position={[0, 0.51, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <div className="die-letter">{die.letter}</div>
-          </Html>
-        </RoundedBox>
-      </Float>
-    </group>
+          {die.letter}
+        </Text>
+      ))}
+    </RigidBody>
   )
 }
 
-function DiceTray({ dice, selectedIds, onSelect, onReroll }: {
+function TrayGeometry() {
+  return (
+    <>
+      <RigidBody type="fixed" colliders={false}>
+        <CuboidCollider args={[3.3, 0.18, 2.15]} position={[0, -0.72, 0]} friction={1} restitution={0.1} />
+        <CuboidCollider args={[0.18, 0.7, 2.15]} position={[-3.3, -0.05, 0]} />
+        <CuboidCollider args={[0.18, 0.7, 2.15]} position={[3.3, -0.05, 0]} />
+        <CuboidCollider args={[3.3, 0.7, 0.18]} position={[0, -0.05, -2.15]} />
+        <CuboidCollider args={[3.3, 0.7, 0.18]} position={[0, -0.05, 2.15]} />
+      </RigidBody>
+
+      <RoundedBox args={[6.9, 0.42, 4.6]} radius={0.3} smoothness={5} position={[0, -0.72, 0]} receiveShadow>
+        <meshStandardMaterial color="#151b23" roughness={0.84} metalness={0.12} />
+      </RoundedBox>
+      <mesh position={[0, -0.18, -2.24]} castShadow receiveShadow>
+        <boxGeometry args={[7, 1.05, 0.25]} />
+        <meshStandardMaterial color="#202833" roughness={0.72} metalness={0.14} />
+      </mesh>
+      <mesh position={[0, -0.18, 2.24]} castShadow receiveShadow>
+        <boxGeometry args={[7, 1.05, 0.25]} />
+        <meshStandardMaterial color="#202833" roughness={0.72} metalness={0.14} />
+      </mesh>
+      <mesh position={[-3.42, -0.18, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.25, 1.05, 4.7]} />
+        <meshStandardMaterial color="#202833" roughness={0.72} metalness={0.14} />
+      </mesh>
+      <mesh position={[3.42, -0.18, 0]} castShadow receiveShadow>
+        <boxGeometry args={[0.25, 1.05, 4.7]} />
+        <meshStandardMaterial color="#202833" roughness={0.72} metalness={0.14} />
+      </mesh>
+    </>
+  )
+}
+
+function DiceTray({ dice, selectedIds, onSelect }: {
   dice: DieState[]
   selectedIds: number[]
   onSelect: (id: number) => void
-  onReroll: (id: number) => void
 }) {
   return (
-    <Canvas shadows camera={{ position: [0, 6.7, 6.5], fov: 42 }}>
+    <Canvas shadows camera={{ position: [0, 6.9, 6.3], fov: 40 }}>
       <color attach="background" args={['#11161d']} />
-      <ambientLight intensity={1.3} />
-      <directionalLight position={[4, 7, 4]} intensity={3.2} castShadow />
-      <pointLight position={[-4, 2, -2]} color="#8e78ff" intensity={14} distance={8} />
-      <group rotation={[-0.05, 0, 0]}>
-        <RoundedBox args={[6.9, 0.45, 4.6]} radius={0.3} smoothness={5} position={[0, -0.6, 0]} receiveShadow>
-          <meshStandardMaterial color="#171d26" roughness={0.72} metalness={0.18} />
-        </RoundedBox>
-        {dice.map((die, index) => (
-          <Die key={die.id} die={die} index={index} selected={selectedIds.includes(die.id)} onSelect={() => onSelect(die.id)} onReroll={() => onReroll(die.id)} />
-        ))}
-      </group>
-      <Environment preset="warehouse" />
+      <ambientLight intensity={1.2} />
+      <directionalLight position={[4, 8, 4]} intensity={3.4} castShadow shadow-mapSize={[1024, 1024]} />
+      <pointLight position={[-4, 2, -2]} color="#8e78ff" intensity={9} distance={8} />
+      <Suspense fallback={null}>
+        <Physics gravity={[0, -18, 0]} timeStep="vary">
+          <TrayGeometry />
+          {dice.map((die) => (
+            <Die
+              key={die.id}
+              die={die}
+              selected={selectedIds.includes(die.id)}
+              onSelect={() => onSelect(die.id)}
+            />
+          ))}
+        </Physics>
+        <Environment preset="warehouse" />
+      </Suspense>
     </Canvas>
   )
 }
 
 export default function App() {
-  const [dice, setDice] = useState<DieState[]>(() => START.map((letter, id) => ({ id, letter, consumed: false, rollKey: 0 })))
+  const [dice, setDice] = useState<DieState[]>(() => START.map((letter, id) => ({ id, letter, consumed: false, rollKey: 1 })))
   const [selectedIds, setSelectedIds] = useState<number[]>([])
   const [rerolls, setRerolls] = useState(3)
   const [score, setScore] = useState(0)
@@ -100,20 +199,45 @@ export default function App() {
   const [repoOpen, setRepoOpen] = useState(true)
   const [deckOpen, setDeckOpen] = useState(true)
   const [selectedCard, setSelectedCard] = useState<number | null>(null)
-  const [message, setMessage] = useState('Click dice to build. Double-click one to reroll it.')
+  const [message, setMessage] = useState('The dice are loose. Select dice to build a word, or select dice and reroll them.')
 
   const currentWord = useMemo(() => selectedIds.map(id => dice.find(d => d.id === id)?.letter ?? '').join(''), [selectedIds, dice])
   const valid = Boolean(WORDS[currentWord])
+  const activeDice = dice.filter(die => !die.consumed)
 
   const selectDie = (id: number) => {
     setSelectedIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
   }
 
-  const rerollDie = (id: number) => {
-    if (rerolls <= 0 || selectedIds.includes(id)) return
+  const rerollSelected = () => {
+    if (rerolls <= 0) {
+      setMessage('No rerolls remain this round.')
+      return
+    }
+    if (selectedIds.length === 0) {
+      setMessage('Select one or more loose dice to reroll.')
+      return
+    }
+
+    const ids = new Set(selectedIds)
+    setDice(items => items.map(die => ids.has(die.id)
+      ? {
+          ...die,
+          letter: LETTERS[Math.floor(Math.random() * LETTERS.length)],
+          rollKey: die.rollKey + 1,
+        }
+      : die
+    ))
     setRerolls(value => value - 1)
-    setDice(items => items.map(d => d.id === id ? { ...d, letter: LETTERS[Math.floor(Math.random() * LETTERS.length)], rollKey: d.rollKey + 1 } : d))
-    setMessage('Die rerolled.')
+    setSelectedIds([])
+    setMessage(`${ids.size} ${ids.size === 1 ? 'die' : 'dice'} tossed back into the tray.`)
+  }
+
+  const shakeRemaining = () => {
+    if (activeDice.length === 0) return
+    setDice(items => items.map(die => die.consumed ? die : { ...die, rollKey: die.rollKey + 1 }))
+    setSelectedIds([])
+    setMessage('The remaining dice were shaken without changing their letters.')
   }
 
   const submit = () => {
@@ -149,8 +273,13 @@ export default function App() {
     setRound(value => value + 1)
     setRerolls(3)
     setSelectedIds([])
-    setDice(START.map((letter, id) => ({ id, letter: Math.random() > 0.35 ? letter : LETTERS[Math.floor(Math.random() * LETTERS.length)], consumed: false, rollKey: 0 })))
-    setMessage('New round.')
+    setDice(START.map((letter, id) => ({
+      id,
+      letter: Math.random() > 0.35 ? letter : LETTERS[Math.floor(Math.random() * LETTERS.length)],
+      consumed: false,
+      rollKey: 1,
+    })))
+    setMessage('New round. The fresh dice tumble into the tray.')
   }
 
   return (
@@ -179,8 +308,10 @@ export default function App() {
       </section>
 
       <section className="tray-wrap">
-        <DiceTray dice={dice} selectedIds={selectedIds} onSelect={selectDie} onReroll={rerollDie} />
+        <DiceTray dice={dice} selectedIds={selectedIds} onSelect={selectDie} />
         <div className="tray-actions">
+          <button className="secondary" onClick={shakeRemaining} disabled={activeDice.length === 0}>SHAKE</button>
+          <button className="secondary" onClick={rerollSelected} disabled={rerolls <= 0 || selectedIds.length === 0}>REROLL SELECTED</button>
           <button className="secondary" onClick={nextRound}>NEXT ROUND</button>
           <button className="primary" disabled={!valid} onClick={submit}>SUBMIT</button>
         </div>
