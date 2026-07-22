@@ -1,9 +1,6 @@
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import wordListPath from 'word-list'
-
-const require = createRequire(import.meta.url)
-const dictionaryHe = require('dictionary-he')
+import hebrewDictionary from 'dictionary-he'
 
 const MAX_LENGTH = 8
 const MIN_LENGTH = 2
@@ -18,10 +15,6 @@ const english = uniqueSorted(
     .map(word => word.trim().toUpperCase())
     .filter(word => word.length >= MIN_LENGTH && word.length <= MAX_LENGTH && /^[A-Z]+$/.test(word))
 )
-
-const hebrewDictionary = await new Promise((resolve, reject) => {
-  dictionaryHe((error, dictionary) => error ? reject(error) : resolve(dictionary))
-})
 
 const hebrew = uniqueSorted(
   hebrewDictionary.dic.toString('utf8')
