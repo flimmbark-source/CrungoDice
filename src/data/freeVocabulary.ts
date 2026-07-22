@@ -1,7 +1,5 @@
 export type FreeLanguage = 'en' | 'he'
 
-// Prototype vocabulary. This module is intentionally data-only so it can be
-// replaced by a generated wordfreq/Hspell export without changing game logic.
 export const FREE_WORDS: Record<FreeLanguage, string[]> = {
   en: [
     'ABLE','ABOUT','ABOVE','ACT','AFTER','AGAIN','AIR','ALL','ALONE','AM','AMONG','AN','AND','ANGLE','ANIMAL','ANSWER','APPLE','ARE','ARM','AROUND','ART','ASK','AT','AWAY',
@@ -38,16 +36,35 @@ export const FREE_WORDS: Record<FreeLanguage, string[]> = {
   ]
 }
 
+const HEBREW_INFO: Record<string, [string, string]> = {
+  'אב':['father','av'],'אבא':['dad','aba'],'אביב':['spring','aviv'],'אבל':['but','aval'],'אגם':['lake','agam'],'אדום':['red','adom'],'אדם':['person','adam'],'אוכל':['food / eats','ochel'],'אור':['light','or'],'אות':['letter / sign','ot'],'אח':['brother','ach'],'אחד':['one','echad'],'אחות':['sister','achot'],'אחר':['other / after','acher'],'אחרי':['after','acharei'],'אי':['island','i'],'איך':['how','eich'],'איפה':['where','eifo'],'איש':['man','ish'],'אין':['there is no','ein'],'אלה':['these','ele'],'אל':['to','el'],'אם':['if / mother','im'],'אמא':['mom','ima'],'אני':['I','ani'],'אנחנו':['we','anachnu'],'אף':['nose / even','af'],'ארבע':['four','arba'],'ארץ':['country / land','eretz'],'אש':['fire','esh'],'את':['you / object marker','at'],'אתה':['you','ata'],'אתם':['you all','atem'],
+  'בא':['comes','ba'],'באה':['comes','ba-a'],'בבית':['at home','babayit'],'בוקר':['morning','boker'],'בחוץ':['outside','bachutz'],'ביחד':['together','beyachad'],'בית':['house','bayit'],'בין':['between','bein'],'בלי':['without','bli'],'בן':['son','ben'],'בנה':['built','bana'],'בני':['my son / sons of','bni'],'בערב':['in the evening','baerev'],'בעיר':['in the city','bair'],'בר':['bar / grain','bar'],'ברחוב':['in the street','barechov'],'בריא':['healthy','bari'],'בת':['daughter','bat'],'בתוך':['inside','betoch'],
+  'גג':['roof','gag'],'גדול':['big','gadol'],'גוף':['body','guf'],'גיל':['age','gil'],'גם':['also','gam'],'גן':['garden','gan'],'גר':['lives','gar'],'גרה':['lives','gara'],'גשם':['rain','geshem'],
+  'דבר':['thing / speak','davar'],'דג':['fish','dag'],'דלת':['door','delet'],'דרך':['way','derech'],'הוא':['he','hu'],'היא':['she','hi'],'היה':['was','haya'],'היום':['today','hayom'],'הכל':['everything','hakol'],'הלך':['went','halach'],'הם':['they','hem'],'הן':['they','hen'],'הר':['mountain','har'],'הרבה':['many','harbe'],'ואז':['and then','veaz'],'ובית':['and house','uvayit'],'וגם':['and also','vegam'],'זה':['this','ze'],'זמן':['time','zman'],'זאת':['this','zot'],
+  'חבר':['friend','chaver'],'חברה':['friend / company','chavera'],'חדש':['new','chadash'],'חדר':['room','cheder'],'חול':['sand / weekday','chol'],'חום':['heat','chom'],'חוץ':['outside','chutz'],'חי':['alive','chai'],'חיים':['life','chayim'],'חלב':['milk','chalav'],'חלון':['window','chalon'],'חם':['hot','cham'],'חמש':['five','chamesh'],'חתול':['cat','chatul'],
+  'טוב':['good','tov'],'טיול':['trip','tiyul'],'יד':['hand','yad'],'יודע':['knows','yodea'],'יום':['day','yom'],'ילד':['boy','yeled'],'ילדה':['girl','yalda'],'ים':['sea','yam'],'יפה':['beautiful','yafe'],'יצא':['went out','yatza'],'יש':['there is','yesh'],'ישן':['old / sleeps','yashan'],
+  'כאן':['here','kan'],'כדור':['ball','kadur'],'כוס':['cup','kos'],'כי':['because','ki'],'כל':['all','kol'],'כלב':['dog','kelev'],'כמו':['like / as','kmo'],'כן':['yes','ken'],'כסא':['chair','kise'],'כיסא':['chair','kise'],'כף':['spoon / palm','kaf'],'כבר':['already','kvar'],'כתב':['wrote','katav'],
+  'לא':['no / not','lo'],'לאכול':['to eat','leechol'],'לב':['heart','lev'],'לבן':['white','lavan'],'לבד':['alone','levad'],'לילה':['night','layla'],'ליד':['near','leyad'],'למה':['why','lama'],'ללכת':['to go','lalechet'],'למד':['learned','lamad'],'לפני':['before','lifnei'],'לקח':['took','lakach'],'לראות':['to see','lirot'],'לשתות':['to drink','lishtot'],
+  'מאוד':['very','meod'],'מאיפה':['from where','meeifo'],'מבחוץ':['from outside','mibachutz'],'מחר':['tomorrow','machar'],'מי':['who','mi'],'מים':['water','mayim'],'מילה':['word','mila'],'מיטה':['bed','mita'],'מכאן':['from here','mikan'],'מלך':['king','melech'],'מן':['from','min'],'מעט':['few','meat'],'מקום':['place','makom'],'מרגיש':['feels','margish'],'משחק':['game','mis-chak'],'משהו':['something','mashehu'],'מתחת':['under','mitachat'],
+  'נגד':['against','neged'],'נהר':['river','nahar'],'נולד':['was born','nolad'],'נעים':['pleasant','naim'],'נסע':['traveled','nasa'],'נר':['candle','ner'],'נתן':['gave','natan'],'סביב':['around','saviv'],'סוף':['end','sof'],'ספר':['book / counted','sefer'],'עבד':['worked','avad'],'עבר':['passed','avar'],'עד':['until','ad'],'עולם':['world','olam'],'עומד':['stands','omed'],'עיר':['city','ir'],'עכשיו':['now','achshav'],'על':['on','al'],'עם':['with / people','im'],'עץ':['tree','etz'],'ערב':['evening','erev'],'פה':['here / mouth','po'],'פעם':['once / time','paam'],'פנים':['face / inside','panim'],'פתח':['opened','patach'],'קטן':['small','katan'],'קיר':['wall','kir'],'קם':['got up','kam'],'קר':['cold','kar'],'קרא':['read / called','kara'],'ראש':['head','rosh'],'ראשון':['first','rishon'],'ראה':['saw','raa'],'רגל':['leg','regel'],'רוצה':['wants','rotze'],'רחוב':['street','rechov'],'רוח':['wind / spirit','ruach'],'רץ':['runs','ratz'],
+  'שאל':['asked','shaal'],'שבוע':['week','shavua'],'שחור':['black','shachor'],'שולחן':['table','shulchan'],'שום':['nothing / garlic','shum'],'שומע':['hears','shomea'],'שמח':['happy','sameach'],'שמש':['sun','shemesh'],'שם':['there / name','sham'],'שנה':['year','shana'],'שני':['second / two','sheni'],'שעה':['hour','shaa'],'של':['of','shel'],'שלום':['hello / peace','shalom'],'שלוש':['three','shalosh'],'שמים':['sky','shamayim'],'שמע':['heard','shama'],'שש':['six','shesh'],'שותה':['drinks','shote'],'תחת':['under','tachat'],'תמונה':['picture','tmuna'],'תמיד':['always','tamid'],'תן':['give','ten'],'תפוח':['apple','tapuach']
+}
+
+const ENGLISH_TO_HEBREW = Object.fromEntries(Object.entries(HEBREW_INFO).map(([he, [en]]) => [en.toUpperCase().split(' / ')[0], he])) as Record<string, string>
+
 export function createVocabulary(words: string[]) {
   const normalized = [...new Set(words.map(word => word.trim().toUpperCase()).filter(Boolean))]
   const wordSet = new Set(normalized)
   const prefixSet = new Set<string>()
-  for (const word of normalized) {
-    for (let index = 1; index <= word.length; index += 1) prefixSet.add(word.slice(0, index))
+  for (const word of normalized) for (let index = 1; index <= word.length; index += 1) prefixSet.add(word.slice(0, index))
+  return { words: normalized, isWord: (value: string) => wordSet.has(value.toUpperCase()), isPrefix: (value: string) => prefixSet.has(value.toUpperCase()) }
+}
+
+export function getFreeWordInfo(word: string, language: FreeLanguage) {
+  const normalized = word.toUpperCase()
+  if (language === 'he') {
+    const [translation, transliteration] = HEBREW_INFO[word] ?? ['Translation pending', word]
+    return { word, translation, transliteration }
   }
-  return {
-    words: normalized,
-    isWord: (value: string) => wordSet.has(value.toUpperCase()),
-    isPrefix: (value: string) => prefixSet.has(value.toUpperCase()),
-  }
+  return { word: normalized, translation: ENGLISH_TO_HEBREW[normalized] ?? 'תרגום בהכנה', transliteration: normalized.toLowerCase() }
 }
