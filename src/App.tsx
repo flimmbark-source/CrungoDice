@@ -46,22 +46,20 @@ const UI: Record<Language, Record<string, string>> = {
   en: {
     diceLanguage: 'Dice Language', gameLanguage: 'Game Language', pack: 'PACK', free: 'FREE', round: 'ROUND', score: 'SCORE', rerolls: 'REROLLS',
     discoverable: 'VALID WORD', discoveredWords: 'DISCOVERED WORDS', freeWords: 'FOUND WORDS', hiddenWords: 'hidden words discovered',
-    emptyRepo: 'The pack contains hidden household words. Follow a glowing path to discover the first one.',
-    emptyFree: 'Build any valid word from the free-play dictionary.', shake: 'SHAKE', rerollSelected: 'REROLL SELECTED', nextRound: 'NEXT ROUND',
-    discover: 'DISCOVER', submit: 'PLAY WORD', decipher: 'DECIPHER', emptyDeck: 'Discovered pack words create recall cards here.',
-    match: 'Match to its spelling', continue: 'CONTINUE', packFound: 'PACK WORD DISCOVERED', clickExplore: 'click to select',
-    holdMove: 'hold to pick up', flickReroll: 'flick to reroll', possible: 'possible continuation', complete: 'A valid word is complete.',
+    emptyRepo: 'The pack contains hidden household words. Follow a glowing path to discover the first one.', emptyFree: 'Build any valid word from the free-play dictionary.',
+    shake: 'SHAKE', rerollSelected: 'REROLL SELECTED', nextRound: 'NEXT ROUND', discover: 'DISCOVER', submit: 'PLAY WORD', decipher: 'DECIPHER',
+    emptyDeck: 'Discovered pack words create recall cards here.', match: 'Match to its spelling', continue: 'CONTINUE', packFound: 'PACK WORD DISCOVERED',
+    clickExplore: 'click to select', holdMove: 'hold to pick up', flickReroll: 'flick to reroll', possible: 'possible continuation', complete: 'A valid word is complete.',
     deadEnd: 'No valid word continues from this path.', noRerolls: 'No rerolls remain this round.', selectFirst: 'Select one or more dice first.',
     thrown: 'Die thrown again.', moved: 'Die moved without changing its face.', fresh: 'A fresh curated roll.', freeFound: 'Word accepted in Free mode.',
   },
   he: {
     diceLanguage: 'שפת הקוביות', gameLanguage: 'שפת המשחק', pack: 'חבילה', free: 'חופשי', round: 'סיבוב', score: 'ניקוד', rerolls: 'הטלות חוזרות',
     discoverable: 'מילה תקינה', discoveredWords: 'מילים שהתגלו', freeWords: 'מילים שנמצאו', hiddenWords: 'מילים נסתרות התגלו',
-    emptyRepo: 'החבילה מכילה מילים נסתרות מהבית. עקבו אחרי מסלול זוהר כדי לגלות את הראשונה.',
-    emptyFree: 'צרו כל מילה תקינה ממילון המשחק החופשי.', shake: 'נער', rerollSelected: 'הטל נבחרות', nextRound: 'סיבוב הבא',
-    discover: 'גלה', submit: 'שחק מילה', decipher: 'פענוח', emptyDeck: 'מילים מהחבילה יוצרות כאן קלפי זיכרון.',
-    match: 'התאם לאיות שלה', continue: 'המשך', packFound: 'מילה מהחבילה התגלתה', clickExplore: 'לחצו לבחירה',
-    holdMove: 'החזיקו כדי להרים', flickReroll: 'העיפו כדי להטיל שוב', possible: 'המשך אפשרי', complete: 'מילה תקינה הושלמה.',
+    emptyRepo: 'החבילה מכילה מילים נסתרות מהבית. עקבו אחרי מסלול זוהר כדי לגלות את הראשונה.', emptyFree: 'צרו כל מילה תקינה ממילון המשחק החופשי.',
+    shake: 'נער', rerollSelected: 'הטל נבחרות', nextRound: 'סיבוב הבא', discover: 'גלה', submit: 'שחק מילה', decipher: 'פענוח',
+    emptyDeck: 'מילים מהחבילה יוצרות כאן קלפי זיכרון.', match: 'התאם לאיות שלה', continue: 'המשך', packFound: 'מילה מהחבילה התגלתה',
+    clickExplore: 'לחצו לבחירה', holdMove: 'החזיקו כדי להרים', flickReroll: 'העיפו כדי להטיל שוב', possible: 'המשך אפשרי', complete: 'מילה תקינה הושלמה.',
     deadEnd: 'אין מילה תקינה שממשיכה מהמסלול הזה.', noRerolls: 'לא נשארו הטלות חוזרות בסיבוב הזה.', selectFirst: 'בחרו קובייה אחת או יותר.',
     thrown: 'הקובייה הוטלה שוב.', moved: 'הקובייה הוזזה בלי לשנות את הפאה.', fresh: 'הטלה מתוכננת חדשה.', freeFound: 'המילה התקבלה במצב חופשי.',
   },
@@ -97,8 +95,16 @@ function freshMotion(die: DieState): Motion {
 
 function canBuildWord(word: string, letters: string[]): boolean {
   const available = [...letters]
-  for (const letter of [...word]) { const index = available.indexOf(letter); if (index < 0) return false; available.splice(index, 1) }
+  for (const letter of [...word]) {
+    const index = available.indexOf(letter)
+    if (index < 0) return false
+    available.splice(index, 1)
+  }
   return true
+}
+
+function canCompleteFromTray(word: string, prefix: string, remainingLetters: string[]): boolean {
+  return word.startsWith(prefix) && canBuildWord(word.slice(prefix.length), remainingLetters)
 }
 
 function evaluateVisibleLetters(language: Language, letters: string[]): number {
@@ -111,7 +117,10 @@ function evaluateVisibleLetters(language: Language, letters: string[]): number {
 
 function chooseCuratedFaces(language: Language): number[] {
   const faces = PACK.diceFaces[language]
-  const candidates = Array.from({ length: 700 }, () => { const indices = faces.map(() => Math.floor(Math.random() * 6)); return { indices, score: evaluateVisibleLetters(language, indices.map((face, die) => faces[die][face])) } }).sort((a, b) => b.score - a.score)
+  const candidates = Array.from({ length: 700 }, () => {
+    const indices = faces.map(() => Math.floor(Math.random() * 6))
+    return { indices, score: evaluateVisibleLetters(language, indices.map((face, die) => faces[die][face])) }
+  }).sort((a, b) => b.score - a.score)
   return candidates[Math.floor(Math.random() * 16)].indices
 }
 
@@ -142,21 +151,33 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
       if (motion.lastRollKey !== die.rollKey) { motion = freshMotion(die); motions.current[die.id] = motion }
       if (motion.held) motion.position.y = FLOOR_Y + HALF + 0.32
       else if (!motion.settling) {
-        motion.velocity.y -= 15.5 * delta; motion.position.addScaledVector(motion.velocity, delta)
-        const speed = motion.angularVelocity.length(); if (speed > 0.001) motion.quaternion.premultiply(new Quaternion().setFromAxisAngle(motion.angularVelocity.clone().normalize(), speed * delta)).normalize()
+        motion.velocity.y -= 15.5 * delta
+        motion.position.addScaledVector(motion.velocity, delta)
+        const speed = motion.angularVelocity.length()
+        if (speed > 0.001) motion.quaternion.premultiply(new Quaternion().setFromAxisAngle(motion.angularVelocity.clone().normalize(), speed * delta)).normalize()
         const floor = FLOOR_Y + HALF
-        if (motion.position.y < floor) { motion.position.y = floor; if (motion.velocity.y < 0) motion.velocity.y *= -0.27; motion.velocity.x *= 0.91; motion.velocity.z *= 0.91; motion.angularVelocity.multiplyScalar(0.86); motion.groundedTime += delta; if (motion.groundedTime > 0.22 && Math.abs(motion.velocity.y) < 0.22 && Math.hypot(motion.velocity.x, motion.velocity.z) < 0.42) { motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) } } else motion.groundedTime = 0
-        motion.position.x = clamp(motion.position.x, LEFT + HALF, RIGHT - HALF); motion.position.z = clamp(motion.position.z, BACK + HALF, FRONT - HALF)
+        if (motion.position.y < floor) {
+          motion.position.y = floor
+          if (motion.velocity.y < 0) motion.velocity.y *= -0.27
+          motion.velocity.x *= 0.91; motion.velocity.z *= 0.91; motion.angularVelocity.multiplyScalar(0.86); motion.groundedTime += delta
+          if (motion.groundedTime > 0.22 && Math.abs(motion.velocity.y) < 0.22 && Math.hypot(motion.velocity.x, motion.velocity.z) < 0.42) { motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) }
+        } else motion.groundedTime = 0
+        motion.position.x = clamp(motion.position.x, LEFT + HALF, RIGHT - HALF)
+        motion.position.z = clamp(motion.position.z, BACK + HALF, FRONT - HALF)
       } else {
-        motion.position.y = FLOOR_Y + HALF; motion.quaternion.slerp(motion.targetQuaternion, Math.min(1, delta * 9))
+        motion.position.y = FLOOR_Y + HALF
+        motion.quaternion.slerp(motion.targetQuaternion, Math.min(1, delta * 9))
         if (!motion.landedReported && motion.quaternion.angleTo(motion.targetQuaternion) < 0.025) { motion.quaternion.copy(motion.targetQuaternion); motion.landedReported = true; onLanded(die.id, die.faces[motion.targetFace]) }
       }
-      const group = refs.current[die.id]; if (group) { group.position.copy(motion.position); group.quaternion.copy(motion.quaternion) }
+      const group = refs.current[die.id]
+      if (group) { group.position.copy(motion.position); group.quaternion.copy(motion.quaternion) }
     }
   })
 
   const transforms: Array<{ position: [number, number, number]; rotation: [number, number, number] }> = [
-    { position: [0, HALF + 0.008, 0], rotation: [-Math.PI / 2, 0, 0] }, { position: [0, -HALF - 0.008, 0], rotation: [Math.PI / 2, 0, Math.PI] }, { position: [0, 0, HALF + 0.008], rotation: [0, 0, 0] }, { position: [0, 0, -HALF - 0.008], rotation: [0, Math.PI, 0] }, { position: [HALF + 0.008, 0, 0], rotation: [0, Math.PI / 2, 0] }, { position: [-HALF - 0.008, 0, 0], rotation: [0, -Math.PI / 2, 0] },
+    { position: [0, HALF + 0.008, 0], rotation: [-Math.PI / 2, 0, 0] }, { position: [0, -HALF - 0.008, 0], rotation: [Math.PI / 2, 0, Math.PI] },
+    { position: [0, 0, HALF + 0.008], rotation: [0, 0, 0] }, { position: [0, 0, -HALF - 0.008], rotation: [0, Math.PI, 0] },
+    { position: [HALF + 0.008, 0, 0], rotation: [0, Math.PI / 2, 0] }, { position: [-HALF - 0.008, 0, 0], rotation: [0, -Math.PI / 2, 0] },
   ]
 
   const pickUp = (id: number) => { const current = drag.current; if (!current || current.id !== id) return; current.pickedUp = true; const motion = motions.current[id]; if (motion) { motion.held = true; motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) } }
@@ -170,9 +191,7 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
     const viable = viableIds.includes(die.id)
     return <group key={die.id} ref={node => { refs.current[die.id] = node }} onPointerDown={event => beginDrag(event, die, selected)} onPointerMove={event => moveDrag(event, die)} onPointerUp={event => endDrag(event, die)} onPointerCancel={() => { const current = drag.current; if (current?.pickupTimer) clearTimeout(current.pickupTimer); const motion = motions.current[die.id]; if (motion) { motion.held = false; motion.position.y = FLOOR_Y + HALF }; drag.current = null }}>
       {viable && !selected && <>
-        <RoundedBox args={[DIE_SIZE * 1.16, DIE_SIZE * 1.16, DIE_SIZE * 1.16]} radius={0.06} smoothness={3}>
-          <meshBasicMaterial color="#ebc620" transparent opacity={0.16} depthWrite={false} />
-        </RoundedBox>
+        <RoundedBox args={[DIE_SIZE * 1.16, DIE_SIZE * 1.16, DIE_SIZE * 1.16]} radius={0.06} smoothness={3}><meshBasicMaterial color="#ebc620" transparent opacity={0.16} depthWrite={false} /></RoundedBox>
         <pointLight position={[0, 0.18, 0]} color="#cfbd46" intensity={1.25} distance={1.15} decay={2} />
       </>}
       <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow>
@@ -218,11 +237,15 @@ export default function App() {
 
   const viableIds = useMemo(() => {
     const selected = new Set(selectedIds)
+    const candidateWords = mode === 'pack' ? availableEntries.map(({ form }) => form.spelling) : FREE_WORDS[diceLanguage]
     return dice.filter(die => !die.consumed && !selected.has(die.id)).filter(candidate => {
       const prefix = currentWord + candidate.letter
-      return mode === 'pack' ? availableEntries.some(({ form }) => form.spelling.startsWith(prefix)) : freeVocabulary.isPrefix(prefix)
+      const remainingLetters = dice
+        .filter(die => !die.consumed && !selected.has(die.id) && die.id !== candidate.id)
+        .map(die => die.letter)
+      return candidateWords.some(word => canCompleteFromTray(word, prefix, remainingLetters))
     }).map(die => die.id)
-  }, [availableEntries, currentWord, dice, freeVocabulary, mode, selectedIds])
+  }, [availableEntries, currentWord, dice, diceLanguage, mode, selectedIds])
 
   const pathMessage = !selectedIds.length
     ? mode === 'pack'
