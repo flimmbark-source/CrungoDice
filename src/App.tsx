@@ -152,13 +152,18 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
     const viable = viableIds.includes(die.id)
     return <group key={die.id} ref={node => { refs.current[die.id] = node }} onPointerDown={event => beginDrag(event, die, selected)} onPointerMove={event => moveDrag(event, die)} onPointerUp={event => endDrag(event, die)} onPointerCancel={() => { const current = drag.current; if (current?.pickupTimer) clearTimeout(current.pickupTimer); const motion = motions.current[die.id]; if (motion) { motion.held = false; motion.position.y = FLOOR_Y + HALF }; drag.current = null }}>
       {viable && !selected && <>
-        <RoundedBox args={[DIE_SIZE * 1.16, DIE_SIZE * 1.16, DIE_SIZE * 1.16]} radius={0.06} smoothness={3}>
-          <meshBasicMaterial color="#74d99a" transparent opacity={0.16} depthWrite={false} />
-        </RoundedBox>
-        <pointLight position={[0, 0.18, 0]} color="#77e39c" intensity={1.25} distance={1.15} decay={2} />
+        <mesh scale={1.22}>
+          <boxGeometry args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} />
+          <meshBasicMaterial color="#69e69a" wireframe transparent opacity={0.9} depthTest={false} />
+        </mesh>
+        <mesh position={[0, -HALF - 0.018, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.29, 0.43, 40]} />
+          <meshBasicMaterial color="#65e894" transparent opacity={0.62} depthWrite={false} />
+        </mesh>
+        <pointLight position={[0, 0.2, 0]} color="#68efa0" intensity={3.2} distance={1.5} decay={2} />
       </>}
       <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow>
-        <meshStandardMaterial color={selected ? '#f0c879' : viable ? '#c9dfcc' : '#d8cfc0'} emissive={selected ? '#79521e' : viable ? '#3b8753' : '#000000'} emissiveIntensity={selected ? 0.16 : viable ? 0.48 : 0} roughness={0.88} metalness={0} />
+        <meshStandardMaterial color={selected ? '#f0c879' : viable ? '#b8e4c2' : '#d8cfc0'} emissive={selected ? '#79521e' : viable ? '#24a653' : '#000000'} emissiveIntensity={selected ? 0.16 : viable ? 0.72 : 0} roughness={0.88} metalness={0} />
       </RoundedBox>
       {transforms.map((transform, face) => <Text key={face} position={transform.position} rotation={transform.rotation} fontSize={0.19} color="#171615" anchorX="center" anchorY="middle">{die.faces[face]}</Text>)}
     </group>
