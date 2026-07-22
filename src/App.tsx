@@ -24,7 +24,15 @@ type DieState = {
   consumed: boolean
   rollKey: number
 }
-type CardState = { id: number; spelling: string; meaning: string; image: string; pointed: string }
+
+type CardState = {
+  id: number
+  spelling: string
+  meaning: string
+  image: string
+  pointed: string
+}
+
 type Motion = {
   position: Vector3
   velocity: Vector3
@@ -126,8 +134,7 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
         const angularSpeed = motion.angularVelocity.length()
         if (angularSpeed > 0.001) {
           const axis = motion.angularVelocity.clone().normalize()
-          const spin = new Quaternion().setFromAxisAngle(axis, angularSpeed * delta)
-          motion.quaternion.premultiply(spin).normalize()
+          motion.quaternion.premultiply(new Quaternion().setFromAxisAngle(axis, angularSpeed * delta)).normalize()
         }
 
         const floor = FLOOR_Y + HALF
@@ -186,13 +193,16 @@ function LooseDice({ dice, selectedIds, onSelect, onLanded }: {
         const a = motions.current[active[i].id]
         const b = motions.current[active[j].id]
         if (!a || !b || a.settling || b.settling) continue
+
         const separation = b.position.clone().sub(a.position)
         const distance = separation.length()
         if (distance <= 0 || distance >= minimumDistance) continue
+
         const normal = separation.multiplyScalar(1 / distance)
         const overlap = minimumDistance - distance
         a.position.addScaledVector(normal, -overlap * 0.5)
         b.position.addScaledVector(normal, overlap * 0.5)
+
         const closingSpeed = b.velocity.clone().sub(a.velocity).dot(normal)
         if (closingSpeed < 0) {
           const impulse = -closingSpeed * 0.55
@@ -261,7 +271,11 @@ function DiceTray({ dice, selectedIds, onSelect, onLanded }: {
   onLanded: (id: number, letter: string) => void
 }) {
   return (
-    <Canvas shadows camera={{ position: [0, 6.45, 6.05], fov: 39 }}>
+    <Canvas
+      shadows
+      camera={{ position: [0, 9.4, 1.15], fov: 34, near: 0.1, far: 100 }}
+      onCreated={({ camera }) => camera.lookAt(0, -0.35, 0)}
+    >
       <color attach="background" args={['#11161d']} />
       <ambientLight intensity={1.15} />
       <directionalLight position={[4, 8, 4]} intensity={3.1} castShadow shadow-mapSize={[1024, 1024]} />
