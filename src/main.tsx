@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import './styles.css'
 import './mobile.css'
 import './mobile-portrait.css'
+import './tray-first-mobile.css'
 
 type StartupState = { failed: boolean; detail: string }
 

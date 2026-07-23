@@ -82,8 +82,14 @@ const FRONT = 1.83
 const PICKUP_DELAY = 180
 const CLICK_DISTANCE = 7
 const THROW_SPEED = 0.7
+const MIN_DIE_SPACING = DIE_SIZE * 1.34
+const FLOOR_SEPARATION_HEIGHT = FLOOR_Y + HALF + 0.12
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
+const clampToTray = (position: Vector3) => {
+  position.x = clamp(position.x, LEFT + HALF, RIGHT - HALF)
+  position.z = clamp(position.z, BACK + HALF, FRONT - HALF)
+}
 
 function landingQuaternion(face: number): Quaternion {
   const rotations = [new Euler(0, 0, 0), new Euler(Math.PI, 0, 0), new Euler(-Math.PI / 2, 0, 0), new Euler(Math.PI / 2, 0, 0), new Euler(0, 0, Math.PI / 2), new Euler(0, 0, -Math.PI / 2)]
@@ -177,7 +183,9 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
 
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 30)
-    for (const die of dice.filter(item => !item.consumed)) {
+    const activeDice = dice.filter(item => !item.consumed)
+
+    for (const die of activeDice) {
       let motion = motions.current[die.id] ?? freshMotion(die)
       motions.current[die.id] = motion
       if (motion.lastRollKey !== die.rollKey) { motion = freshMotion(die); motions.current[die.id] = motion }
@@ -194,15 +202,56 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
           motion.velocity.x *= 0.91; motion.velocity.z *= 0.91; motion.angularVelocity.multiplyScalar(0.86); motion.groundedTime += delta
           if (motion.groundedTime > 0.22 && Math.abs(motion.velocity.y) < 0.22 && Math.hypot(motion.velocity.x, motion.velocity.z) < 0.42) { motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) }
         } else motion.groundedTime = 0
-        motion.position.x = clamp(motion.position.x, LEFT + HALF, RIGHT - HALF)
-        motion.position.z = clamp(motion.position.z, BACK + HALF, FRONT - HALF)
+        clampToTray(motion.position)
       } else {
         motion.position.y = FLOOR_Y + HALF
         motion.quaternion.slerp(motion.targetQuaternion, Math.min(1, delta * 9))
         if (!motion.landedReported && motion.quaternion.angleTo(motion.targetQuaternion) < 0.025) { motion.quaternion.copy(motion.targetQuaternion); motion.landedReported = true; onLanded(die.id, die.faces[motion.targetFace]) }
       }
+    }
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let first = 0; first < activeDice.length; first += 1) {
+        const firstDie = activeDice[first]
+        const firstMotion = motions.current[firstDie.id]
+        if (!firstMotion || firstMotion.held || firstMotion.position.y > FLOOR_SEPARATION_HEIGHT) continue
+
+        for (let second = first + 1; second < activeDice.length; second += 1) {
+          const secondDie = activeDice[second]
+          const secondMotion = motions.current[secondDie.id]
+          if (!secondMotion || secondMotion.held || secondMotion.position.y > FLOOR_SEPARATION_HEIGHT) continue
+
+          const dx = secondMotion.position.x - firstMotion.position.x
+          const dz = secondMotion.position.z - firstMotion.position.z
+          const distance = Math.hypot(dx, dz)
+          if (distance >= MIN_DIE_SPACING) continue
+
+          let nx: number
+          let nz: number
+          if (distance < 0.0001) {
+            const angle = ((firstDie.id * 37 + secondDie.id * 61) % 360) * Math.PI / 180
+            nx = Math.cos(angle)
+            nz = Math.sin(angle)
+          } else {
+            nx = dx / distance
+            nz = dz / distance
+          }
+
+          const push = (MIN_DIE_SPACING - distance) * 0.5
+          firstMotion.position.x -= nx * push
+          firstMotion.position.z -= nz * push
+          secondMotion.position.x += nx * push
+          secondMotion.position.z += nz * push
+          clampToTray(firstMotion.position)
+          clampToTray(secondMotion.position)
+        }
+      }
+    }
+
+    for (const die of activeDice) {
+      const motion = motions.current[die.id]
       const group = refs.current[die.id]
-      if (group) { group.position.copy(motion.position); group.quaternion.copy(motion.quaternion) }
+      if (motion && group) { group.position.copy(motion.position); group.quaternion.copy(motion.quaternion) }
     }
   })
 
