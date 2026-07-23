@@ -17,7 +17,21 @@ type DieState = { id: number; faces: DieFaces; letter: string; consumed: boolean
 type CardState = { cardId: number; conceptId: string; diceLanguage: Language }
 type Reward = { mode: GameMode; word: string; entry?: PackEntry }
 type Motion = { position: Vector3; velocity: Vector3; quaternion: Quaternion; angularVelocity: Vector3; targetQuaternion: Quaternion; targetFace: number; lastRollKey: number; groundedTime: number; settling: boolean; landedReported: boolean; held: boolean }
-type DragState = { id: number; pointerId: number; lastX: number; lastY: number; lastTime: number; velocityX: number; velocityY: number; totalDistance: number; wasSelected: boolean; pickedUp: boolean; pickupTimer: ReturnType<typeof setTimeout> | null } | null
+type DragState = {
+  id: number
+  pointerId: number
+  pointerType: string
+  lastX: number
+  lastY: number
+  lastTime: number
+  velocityX: number
+  velocityY: number
+  totalDistance: number
+  tapDistance: number
+  wasSelected: boolean
+  pickedUp: boolean
+  pickupTimer: ReturnType<typeof setTimeout> | null
+} | null
 
 const PACK: WordPack = {
   id: 'around-the-house',
@@ -79,11 +93,14 @@ const LEFT = -3.02
 const RIGHT = 3.02
 const BACK = -1.83
 const FRONT = 1.83
-const PICKUP_DELAY = 180
-const CLICK_DISTANCE = 7
+const MOUSE_PICKUP_DELAY = 180
+const TOUCH_PICKUP_DELAY = 340
+const MOUSE_TAP_DISTANCE = 7
+const TOUCH_TAP_DISTANCE = 18
 const THROW_SPEED = 0.7
 const MIN_DIE_SPACING = DIE_SIZE * 1.34
 const FLOOR_SEPARATION_HEIGHT = FLOOR_Y + HALF + 0.12
+const HIT_TARGET_SIZE = DIE_SIZE * 1.5
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min)
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value))
 const clampToTray = (position: Vector3) => {
@@ -215,17 +232,14 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
         const firstDie = activeDice[first]
         const firstMotion = motions.current[firstDie.id]
         if (!firstMotion || firstMotion.held || firstMotion.position.y > FLOOR_SEPARATION_HEIGHT) continue
-
         for (let second = first + 1; second < activeDice.length; second += 1) {
           const secondDie = activeDice[second]
           const secondMotion = motions.current[secondDie.id]
           if (!secondMotion || secondMotion.held || secondMotion.position.y > FLOOR_SEPARATION_HEIGHT) continue
-
           const dx = secondMotion.position.x - firstMotion.position.x
           const dz = secondMotion.position.z - firstMotion.position.z
           const distance = Math.hypot(dx, dz)
           if (distance >= MIN_DIE_SPACING) continue
-
           let nx: number
           let nz: number
           if (distance < 0.0001) {
@@ -236,7 +250,6 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
             nx = dx / distance
             nz = dz / distance
           }
-
           const push = (MIN_DIE_SPACING - distance) * 0.5
           firstMotion.position.x -= nx * push
           firstMotion.position.z -= nz * push
@@ -261,16 +274,119 @@ function LooseDice({ dice, selectedIds, viableIds, onSelectNow, onDeselectClick,
     { position: [HALF + 0.008, 0, 0], rotation: [0, Math.PI / 2, 0] }, { position: [-HALF - 0.008, 0, 0], rotation: [0, -Math.PI / 2, 0] },
   ]
 
-  const pickUp = (id: number) => { const current = drag.current; if (!current || current.id !== id) return; current.pickedUp = true; const motion = motions.current[id]; if (motion) { motion.held = true; motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) } }
-  const beginDrag = (event: ThreeEvent<PointerEvent>, die: DieState, selected: boolean) => { event.stopPropagation(); onSelectNow(die.id); const now = performance.now(); drag.current = { id: die.id, pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY, lastTime: now, velocityX: 0, velocityY: 0, totalDistance: 0, wasSelected: selected, pickedUp: false, pickupTimer: null }; drag.current.pickupTimer = setTimeout(() => pickUp(die.id), PICKUP_DELAY); (event.target as unknown as { setPointerCapture?: (id: number) => void }).setPointerCapture?.(event.pointerId) }
-  const moveDrag = (event: ThreeEvent<PointerEvent>, die: DieState) => { const current = drag.current; if (!current || current.id !== die.id || current.pointerId !== event.pointerId) return; event.stopPropagation(); const now = performance.now(); const dt = Math.max(1, now - current.lastTime); const dx = event.clientX - current.lastX; const dy = event.clientY - current.lastY; current.velocityX = dx / dt; current.velocityY = dy / dt; current.totalDistance += Math.hypot(dx, dy); current.lastX = event.clientX; current.lastY = event.clientY; current.lastTime = now; if (!current.pickedUp) return; const motion = motions.current[die.id]; if (!motion) return; const canvas = event.nativeEvent.target instanceof Element ? event.nativeEvent.target.closest('canvas') : null; motion.position.x = clamp(motion.position.x + dx / (canvas?.clientWidth ?? 800) * (RIGHT - LEFT) * 1.15, LEFT + HALF, RIGHT - HALF); motion.position.z = clamp(motion.position.z + dy / (canvas?.clientHeight ?? 500) * (FRONT - BACK) * 1.15, BACK + HALF, FRONT - HALF) }
-  const endDrag = (event: ThreeEvent<PointerEvent>, die: DieState) => { event.stopPropagation(); const current = drag.current; if (!current || current.id !== die.id || current.pointerId !== event.pointerId) return; if (current.pickupTimer) clearTimeout(current.pickupTimer); (event.target as unknown as { releasePointerCapture?: (id: number) => void }).releasePointerCapture?.(event.pointerId); drag.current = null; const motion = motions.current[die.id]; const isClick = !current.pickedUp && current.totalDistance < CLICK_DISTANCE; const isThrow = current.pickedUp && Math.hypot(current.velocityX, current.velocityY) >= THROW_SPEED && current.totalDistance >= CLICK_DISTANCE; if (isClick) { if (current.wasSelected) onDeselectClick(die.id); return } if (isThrow && onThrow(die.id)) return; if (motion) { motion.held = false; motion.position.y = FLOOR_Y + HALF; motion.settling = true; motion.velocity.set(0, 0, 0); motion.angularVelocity.set(0, 0, 0) } onPlaced() }
+  const pickUp = (id: number) => {
+    const current = drag.current
+    if (!current || current.id !== id || current.totalDistance > current.tapDistance) return
+    current.pickedUp = true
+    const motion = motions.current[id]
+    if (motion) {
+      motion.held = true
+      motion.settling = true
+      motion.velocity.set(0, 0, 0)
+      motion.angularVelocity.set(0, 0, 0)
+    }
+  }
+
+  const beginDrag = (event: ThreeEvent<PointerEvent>, die: DieState, selected: boolean) => {
+    event.stopPropagation()
+    const pointerType = event.nativeEvent.pointerType || 'mouse'
+    const isTouch = pointerType === 'touch' || pointerType === 'pen'
+    const now = performance.now()
+    drag.current = {
+      id: die.id,
+      pointerId: event.pointerId,
+      pointerType,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      lastTime: now,
+      velocityX: 0,
+      velocityY: 0,
+      totalDistance: 0,
+      tapDistance: isTouch ? TOUCH_TAP_DISTANCE : MOUSE_TAP_DISTANCE,
+      wasSelected: selected,
+      pickedUp: false,
+      pickupTimer: null,
+    }
+    drag.current.pickupTimer = setTimeout(() => pickUp(die.id), isTouch ? TOUCH_PICKUP_DELAY : MOUSE_PICKUP_DELAY)
+    ;(event.target as unknown as { setPointerCapture?: (id: number) => void }).setPointerCapture?.(event.pointerId)
+  }
+
+  const moveDrag = (event: ThreeEvent<PointerEvent>, die: DieState) => {
+    const current = drag.current
+    if (!current || current.id !== die.id || current.pointerId !== event.pointerId) return
+    event.stopPropagation()
+    const now = performance.now()
+    const dt = Math.max(1, now - current.lastTime)
+    const dx = event.clientX - current.lastX
+    const dy = event.clientY - current.lastY
+    current.velocityX = dx / dt
+    current.velocityY = dy / dt
+    current.totalDistance += Math.hypot(dx, dy)
+    current.lastX = event.clientX
+    current.lastY = event.clientY
+    current.lastTime = now
+
+    if (!current.pickedUp && current.totalDistance > current.tapDistance && current.pickupTimer) {
+      clearTimeout(current.pickupTimer)
+      current.pickupTimer = null
+    }
+    if (!current.pickedUp) return
+
+    const motion = motions.current[die.id]
+    if (!motion) return
+    const canvas = event.nativeEvent.target instanceof Element ? event.nativeEvent.target.closest('canvas') : null
+    motion.position.x = clamp(motion.position.x + dx / (canvas?.clientWidth ?? 800) * (RIGHT - LEFT) * 1.15, LEFT + HALF, RIGHT - HALF)
+    motion.position.z = clamp(motion.position.z + dy / (canvas?.clientHeight ?? 500) * (FRONT - BACK) * 1.15, BACK + HALF, FRONT - HALF)
+  }
+
+  const endDrag = (event: ThreeEvent<PointerEvent>, die: DieState) => {
+    event.stopPropagation()
+    const current = drag.current
+    if (!current || current.id !== die.id || current.pointerId !== event.pointerId) return
+    if (current.pickupTimer) clearTimeout(current.pickupTimer)
+    ;(event.target as unknown as { releasePointerCapture?: (id: number) => void }).releasePointerCapture?.(event.pointerId)
+    drag.current = null
+
+    const motion = motions.current[die.id]
+    const isTap = !current.pickedUp && current.totalDistance <= current.tapDistance
+    const isThrow = current.pickedUp && Math.hypot(current.velocityX, current.velocityY) >= THROW_SPEED && current.totalDistance >= current.tapDistance
+
+    if (isTap) {
+      if (current.wasSelected) onDeselectClick(die.id)
+      else onSelectNow(die.id)
+      return
+    }
+    if (isThrow && onThrow(die.id)) return
+    if (motion) {
+      motion.held = false
+      motion.position.y = FLOOR_Y + HALF
+      motion.settling = true
+      motion.velocity.set(0, 0, 0)
+      motion.angularVelocity.set(0, 0, 0)
+    }
+    onPlaced()
+  }
+
+  const cancelDrag = (die: DieState) => {
+    const current = drag.current
+    if (current?.pickupTimer) clearTimeout(current.pickupTimer)
+    const motion = motions.current[die.id]
+    if (motion) {
+      motion.held = false
+      motion.position.y = FLOOR_Y + HALF
+      motion.settling = true
+    }
+    drag.current = null
+  }
 
   return <>{dice.map(die => {
     if (die.consumed) return null
     const selected = selectedIds.includes(die.id)
     const viable = viableIds.includes(die.id)
-    return <group key={die.id} ref={node => { refs.current[die.id] = node }} onPointerDown={event => beginDrag(event, die, selected)} onPointerMove={event => moveDrag(event, die)} onPointerUp={event => endDrag(event, die)} onPointerCancel={() => { const current = drag.current; if (current?.pickupTimer) clearTimeout(current.pickupTimer); const motion = motions.current[die.id]; if (motion) { motion.held = false; motion.position.y = FLOOR_Y + HALF }; drag.current = null }}>
+    return <group key={die.id} ref={node => { refs.current[die.id] = node }} onPointerDown={event => beginDrag(event, die, selected)} onPointerMove={event => moveDrag(event, die)} onPointerUp={event => endDrag(event, die)} onPointerCancel={() => cancelDrag(die)}>
+      <RoundedBox args={[HIT_TARGET_SIZE, HIT_TARGET_SIZE, HIT_TARGET_SIZE]} radius={0.08} smoothness={2}>
+        <meshBasicMaterial transparent opacity={0.001} depthWrite={false} />
+      </RoundedBox>
       {viable && !selected && <><RoundedBox args={[DIE_SIZE * 1.16, DIE_SIZE * 1.16, DIE_SIZE * 1.16]} radius={0.06} smoothness={3}><meshBasicMaterial color="#ebc620" transparent opacity={0.16} depthWrite={false} /></RoundedBox><pointLight position={[0, 0.18, 0]} color="#cfbd46" intensity={1.25} distance={1.15} decay={2} /></>}
       <RoundedBox args={[DIE_SIZE, DIE_SIZE, DIE_SIZE]} radius={0.035} smoothness={2} castShadow receiveShadow><meshStandardMaterial color={selected ? '#f0c879' : viable ? '#db9d33' : '#d8cfc0'} emissive={selected ? '#79521e' : viable ? '#3b8753' : '#000000'} emissiveIntensity={selected ? 0.16 : viable ? 0.48 : 0} roughness={0.88} metalness={0} /></RoundedBox>
       {transforms.map((transform, face) => <Text key={face} position={transform.position} rotation={transform.rotation} fontSize={0.19} color="#171615" anchorX="center" anchorY="middle">{die.faces[face]}</Text>)}
@@ -433,9 +549,21 @@ export default function App() {
   const freeRewardInfo = reward?.mode === 'free' ? getFreeWordInfo(reward.word, diceLanguage) : null
 
   return <main className="game-shell" dir={gameLanguage === 'he' ? 'rtl' : 'ltr'}>
-    <div className="language-controls" aria-label="Language settings"><label><span>🎲 {t.diceLanguage}</span><select disabled={freeLoading} value={diceLanguage} onChange={event => void switchDiceLanguage(event.target.value as Language)}><option value="he">א עברית</option><option value="en">A English</option></select></label><label><span>🌐 {t.gameLanguage}</span><select value={gameLanguage} onChange={event => setGameLanguage(event.target.value as Language)}><option value="en">EN English</option><option value="he">עב עברית</option></select></label></div>
-    <div className="mode-toggle" role="group" aria-label="Game mode"><button disabled={freeLoading} className={mode === 'pack' ? 'active' : ''} onClick={() => void switchMode('pack')}>📦 {t.pack}</button><button disabled={freeLoading} className={mode === 'free' ? 'active' : ''} onClick={() => void switchMode('free')}>{freeLoading ? '…' : `✦ ${t.free}`}</button></div>
-    <header className="topbar"><div className="stat"><span>{t.round}</span><strong>{round}</strong></div><div className="stat"><span>{t.score}</span><strong>{score.toLocaleString()}</strong></div><div className="word-display"><span>{mode === 'pack' ? PACK.title[gameLanguage].toUpperCase() : t.free}</span><strong dir={direction}>{currentWord || '—'}</strong><small>{valid ? t.discoverable : pathMessage.toUpperCase()}</small></div><div className="stat"><span>{t.rerolls}</span><strong>{rerolls}</strong></div></header>
+    <div className="control-cluster">
+      <div className="language-controls" aria-label="Language settings">
+        <label><span>🎲 {t.diceLanguage}</span><select aria-label={t.diceLanguage} disabled={freeLoading} value={diceLanguage} onChange={event => void switchDiceLanguage(event.target.value as Language)}><option value="he">א עברית</option><option value="en">A English</option></select></label>
+        <label><span>🌐 {t.gameLanguage}</span><select aria-label={t.gameLanguage} value={gameLanguage} onChange={event => setGameLanguage(event.target.value as Language)}><option value="en">EN English</option><option value="he">עב עברית</option></select></label>
+      </div>
+      <div className="mode-toggle" role="group" aria-label="Game mode"><button disabled={freeLoading} className={mode === 'pack' ? 'active' : ''} onClick={() => void switchMode('pack')}>📦 {t.pack}</button><button disabled={freeLoading} className={mode === 'free' ? 'active' : ''} onClick={() => void switchMode('free')}>{freeLoading ? '…' : `✦ ${t.free}`}</button></div>
+    </div>
+    <header className="topbar">
+      <div className="stats-strip">
+        <div className="stat"><span>{t.round}</span><strong>{round}</strong></div>
+        <div className="stat"><span>{t.score}</span><strong>{score.toLocaleString()}</strong></div>
+        <div className="word-display"><span>{mode === 'pack' ? PACK.title[gameLanguage].toUpperCase() : t.free}</span><strong dir={direction}>{currentWord || '—'}</strong><small>{valid ? t.discoverable : pathMessage.toUpperCase()}</small></div>
+        <div className="stat"><span>{t.rerolls}</span><strong>{rerolls}</strong></div>
+      </div>
+    </header>
     <section className={`repository panel ${repoOpen ? 'open' : 'closed'}`}><button className="panel-tab" onClick={() => setRepoOpen(open => !open)} aria-label="Toggle discovered words">{repoOpen ? '‹' : '›'}</button><div className="panel-content"><h2>{mode === 'pack' ? t.discoveredWords : t.freeWords}</h2><p>{mode === 'pack' ? `${Object.keys(currentDiscoveries).length} / ${PACK.entries.length} · ${PACK.description[gameLanguage]}` : `${Object.keys(currentFreeFound).length} unique words`}</p><div className="stack-list">
       {mode === 'pack' ? <>{!Object.keys(currentDiscoveries).length && <div className="empty">{t.emptyRepo}</div>}{PACK.entries.filter(item => currentDiscoveries[item.id]).map(item => { const form = item.forms[diceLanguage]; return <details key={item.id} className="word-discovery"><summary><b dir={direction}>{form.spelling}</b><span>×{currentDiscoveries[item.id]}</span></summary><button className="discovery-detail" onClick={() => matchConcept(item.id)}><span className="discovery-icon">{item.image}</span><span><strong dir={direction}>{form.display}</strong><small>{item.meanings[gameLanguage]} · {form.pronunciation}</small></span></button></details> })}</> : <>{!Object.keys(currentFreeFound).length && <div className="empty">{t.emptyFree}</div>}{Object.entries(currentFreeFound).sort(([a], [b]) => a.localeCompare(b)).map(([word, count]) => { const info = getFreeWordInfo(word, diceLanguage); return <button className="word-discovery free-word free-word-button" key={word} onClick={() => setReward({ mode: 'free', word })}><span><strong dir={direction}>{word}</strong><small>{info.translation} · {info.transliteration}</small></span><span>×{count}</span></button> })}</>}
     </div></div></section>
