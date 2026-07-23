@@ -2,6 +2,7 @@ import React, { Suspense } from 'react'
 import ReactDOM from 'react-dom/client'
 import './styles.css'
 import './mobile.css'
+import './mobile-portrait.css'
 
 type StartupState = { failed: boolean; detail: string }
 
